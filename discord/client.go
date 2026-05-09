@@ -86,10 +86,16 @@ func (c *Client) EditInteractionResponse(token string, content string) error {
 	return err
 }
 
-func (c *Client) CreateMessage(channelID string, content string) error {
+func (c *Client) CreateMessage(channelID string, content string, replyToMessageID string) error {
 	url := fmt.Sprintf("https://discord.com/api/v10/channels/%s/messages", channelID)
 	body := map[string]interface{}{
 		"content": content,
+	}
+
+	if replyToMessageID != "" {
+		body["message_reference"] = map[string]string{
+			"message_id": replyToMessageID,
+		}
 	}
 
 	_, err := c.request("POST", url, body, true)

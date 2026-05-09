@@ -141,7 +141,7 @@ func (b *Bot) HandleScrolls(c *gin.Context, interaction discord.Interaction) {
 		}
 
 		b.DiscordClient.EditInteractionResponse(interaction.Token, fmt.Sprintf("✅ Обработано %d пользователей. Таблица Notion обновлена.", count))
-		b.DiscordClient.CreateMessage(interaction.ChannelID, fmt.Sprintf("📊 **Отчет /scrolls**\nБаза данных Notion обновлена. Обработано участников: %d.", count))
+		b.DiscordClient.CreateMessage(interaction.ChannelID, fmt.Sprintf("📊 **Отчет /scrolls**\nБаза данных Notion обновлена. Обработано участников: %d.", count), "")
 		log.Printf("Scrolls command completed: %d users added", count)
 	}()
 }
@@ -160,20 +160,6 @@ func (b *Bot) HandleRoll(c *gin.Context, interaction discord.Interaction) {
 			return
 		}
 
-		threadParticipants := make(map[string]string) // discordID -> display name
-		for _, msg := range messages {
-			if len(msg.Attachments) > 0 {
-				displayName := msg.Author.Username
-				if msg.Author.GlobalName != "" {
-					displayName = msg.Author.GlobalName
-				}
-				if msg.Member != nil && msg.Member.Nick != nil && *msg.Member.Nick != "" {
-					displayName = *msg.Member.Nick
-				}
-				threadParticipants[msg.Author.ID] = displayName
-			}
-		}
-
 		// 2. Get users with scrolls from Notion
 		scrollOwners, err := b.NotionClient.GetUsersWithScrolls()
 		if err != nil {
@@ -181,30 +167,51 @@ func (b *Bot) HandleRoll(c *gin.Context, interaction discord.Interaction) {
 			return
 		}
 
-		// 3. Find intersection
-		var eligible []string
-		for id := range threadParticipants {
-			if scrollOwners[id] {
-				eligible = append(eligible, id)
+		// 3. Find intersection and store message IDs for replies
+		type winnerInfo struct {
+			userID    string
+			userName  string
+			messageID string
+		}
+		var eligible []winnerInfo
+
+		// Map to ensure we pick unique users but store one of their message IDs
+		processedUsers := make(map[string]bool)
+
+		for _, msg := range messages {
+			if len(msg.Attachments) > 0 && scrollOwners[msg.Author.ID] && !processedUsers[msg.Author.ID] {
+				displayName := msg.Author.Username
+				if msg.Author.GlobalName != "" {
+					displayName = msg.Author.GlobalName
+				}
+				if msg.Member != nil && msg.Member.Nick != nil && *msg.Member.Nick != "" {
+					displayName = *msg.Member.Nick
+				}
+
+				eligible = append(eligible, winnerInfo{
+					userID:    msg.Author.ID,
+					userName:  displayName,
+					messageID: msg.ID,
+				})
+				processedUsers[msg.Author.ID] = true
 			}
 		}
 
 		if len(eligible) == 0 {
 			msg := "Не найдено подходящих участников (нужен скриншот в этом треде и наличие свитка в таблице)."
 			b.DiscordClient.EditInteractionResponse(interaction.Token, msg)
-			b.DiscordClient.CreateMessage(interaction.ChannelID, msg)
+			b.DiscordClient.CreateMessage(interaction.ChannelID, msg, "")
 			log.Printf("Roll command completed. No eligible participants found.")
 			return
 		}
 
 		// 4. Randomly select
 		rand.Seed(time.Now().UnixNano())
-		winnerID := eligible[rand.Intn(len(eligible))]
-		winnerName := threadParticipants[winnerID]
+		winner := eligible[rand.Intn(len(eligible))]
 
-		resultMsg := fmt.Sprintf("🎲 Розыгрыш завершен!\nПобедитель: <@%s> (%s)\nЭтот человек получит предмет!", winnerID, winnerName)
+		resultMsg := fmt.Sprintf("🎲 Розыгрыш завершен!\nПобедитель: <@%s> (%s)\nЭтот человек получит предмет!", winner.userID, winner.userName)
 		b.DiscordClient.EditInteractionResponse(interaction.Token, resultMsg)
-		err = b.DiscordClient.CreateMessage(interaction.ChannelID, resultMsg)
+		err = b.DiscordClient.CreateMessage(interaction.ChannelID, resultMsg, winner.messageID)
 		if err != nil {
 			log.Printf("Error sending message to Discord channel %s: %v", interaction.ChannelID, err)
 		}
@@ -212,13 +219,12 @@ func (b *Bot) HandleRoll(c *gin.Context, interaction discord.Interaction) {
 		// Добавляем реакцию :pig: на изначальное сообщение (стартер треда)
 		channelInfo, err := b.DiscordClient.GetChannel(interaction.ChannelID)
 		if err == nil && channelInfo.ParentID != "" {
-			// ID треда совпадает с ID сообщения, которое его создало
 			err = b.DiscordClient.AddReaction(channelInfo.ParentID, interaction.ChannelID, "🐷")
 			if err != nil {
 				log.Printf("Error adding reaction: %v", err)
 			}
 		}
 
-		log.Printf("Roll command completed. Winner: %s", winnerName)
+		log.Printf("Roll command completed. Winner: %s", winner.userName)
 	}()
 }
