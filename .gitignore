@@ -1,0 +1,6 @@
+.env
+bot.exe
+notion_check.json
+db_structure.json
+*.exe
+vendor/
