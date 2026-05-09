@@ -1,0 +1,30 @@
+steps:
+  # 1. Собираем Docker образ
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/discord-bot:$COMMIT_SHA', '.']
+
+  # 2. Пушим образ в реестр (GCR)
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/discord-bot:$COMMIT_SHA']
+
+  # 3. Деплоим в Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'discord-bot'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/discord-bot:$COMMIT_SHA'
+      - '--region'
+      - 'europe-west1' # Можно заменить на ваш регион
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+
+# Список образов, которые нужно сохранить
+images:
+  - 'gcr.io/$PROJECT_ID/discord-bot:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
