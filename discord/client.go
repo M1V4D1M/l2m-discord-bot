@@ -60,22 +60,6 @@ func (c *Client) request(method, url string, body interface{}, useBotToken bool)
 	return respBody, nil
 }
 
-type Message struct {
-	ID          string  `json:"id"`
-	Content     string  `json:"content"`
-	Author      User    `json:"author"`
-	Member      *Member `json:"member"` // Добавлено для получения ника на сервере
-	Attachments []struct {
-		ID string `json:"id"`
-	} `json:"attachments"`
-}
-
-type User struct {
-	ID         string `json:"id"`
-	Username   string `json:"username"`
-	GlobalName string `json:"global_name"` // Новое поле Discord
-}
-
 func (c *Client) FetchThreadMessages(channelID string) ([]Message, error) {
 	url := fmt.Sprintf("https://discord.com/api/v10/channels/%s/messages?limit=100", channelID)
 	respBody, err := c.request("GET", url, nil, true)
