@@ -108,10 +108,17 @@ func (b *Bot) HandleScrolls(c *gin.Context, interaction discord.Interaction) {
 		}
 
 		// Filter unique users with attachments
-		uniqueUsers := make(map[string]string) // discordID -> username
+		uniqueUsers := make(map[string]string) // discordID -> display name
 		for _, msg := range messages {
 			if len(msg.Attachments) > 0 {
-				uniqueUsers[msg.Author.ID] = msg.Author.Username
+				displayName := msg.Author.Username
+				if msg.Author.GlobalName != "" {
+					displayName = msg.Author.GlobalName
+				}
+				if msg.Member != nil && msg.Member.Nick != nil && *msg.Member.Nick != "" {
+					displayName = *msg.Member.Nick
+				}
+				uniqueUsers[msg.Author.ID] = displayName
 			}
 		}
 
@@ -153,10 +160,17 @@ func (b *Bot) HandleRoll(c *gin.Context, interaction discord.Interaction) {
 			return
 		}
 
-		threadParticipants := make(map[string]string) // discordID -> username
+		threadParticipants := make(map[string]string) // discordID -> display name
 		for _, msg := range messages {
 			if len(msg.Attachments) > 0 {
-				threadParticipants[msg.Author.ID] = msg.Author.Username
+				displayName := msg.Author.Username
+				if msg.Author.GlobalName != "" {
+					displayName = msg.Author.GlobalName
+				}
+				if msg.Member != nil && msg.Member.Nick != nil && *msg.Member.Nick != "" {
+					displayName = *msg.Member.Nick
+				}
+				threadParticipants[msg.Author.ID] = displayName
 			}
 		}
 

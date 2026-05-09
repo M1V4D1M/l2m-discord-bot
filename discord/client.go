@@ -61,17 +61,19 @@ func (c *Client) request(method, url string, body interface{}, useBotToken bool)
 }
 
 type Message struct {
-	ID        string `json:"id"`
-	Content   string `json:"content"`
-	Author    User   `json:"author"`
+	ID          string  `json:"id"`
+	Content     string  `json:"content"`
+	Author      User    `json:"author"`
+	Member      *Member `json:"member"` // Добавлено для получения ника на сервере
 	Attachments []struct {
 		ID string `json:"id"`
 	} `json:"attachments"`
 }
 
 type User struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
+	ID         string `json:"id"`
+	Username   string `json:"username"`
+	GlobalName string `json:"global_name"` // Новое поле Discord
 }
 
 func (c *Client) FetchThreadMessages(channelID string) ([]Message, error) {
