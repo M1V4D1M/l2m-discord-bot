@@ -208,6 +208,17 @@ func (b *Bot) HandleRoll(c *gin.Context, interaction discord.Interaction) {
 		if err != nil {
 			log.Printf("Error sending message to Discord channel %s: %v", interaction.ChannelID, err)
 		}
+
+		// Добавляем реакцию :pig: на изначальное сообщение (стартер треда)
+		channelInfo, err := b.DiscordClient.GetChannel(interaction.ChannelID)
+		if err == nil && channelInfo.ParentID != "" {
+			// ID треда совпадает с ID сообщения, которое его создало
+			err = b.DiscordClient.AddReaction(channelInfo.ParentID, interaction.ChannelID, "🐷")
+			if err != nil {
+				log.Printf("Error adding reaction: %v", err)
+			}
+		}
+
 		log.Printf("Roll command completed. Winner: %s", winnerName)
 	}()
 }

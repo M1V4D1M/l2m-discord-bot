@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 type Client struct {
@@ -93,4 +94,30 @@ func (c *Client) CreateMessage(channelID string, content string) error {
 
 	_, err := c.request("POST", url, body, true)
 	return err
+}
+
+func (c *Client) AddReaction(channelID, messageID, emoji string) error {
+	encodedEmoji := url.PathEscape(emoji)
+	url := fmt.Sprintf("https://discord.com/api/v10/channels/%s/messages/%s/reactions/%s/@me", channelID, messageID, encodedEmoji)
+	_, err := c.request("PUT", url, nil, true)
+	return err
+}
+
+type Channel struct {
+	ID       string `json:"id"`
+	ParentID string `json:"parent_id"`
+}
+
+func (c *Client) GetChannel(channelID string) (*Channel, error) {
+	url := fmt.Sprintf("https://discord.com/api/v10/channels/%s", channelID)
+	respBody, err := c.request("GET", url, nil, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var channel Channel
+	if err := json.Unmarshal(respBody, &channel); err != nil {
+		return nil, err
+	}
+	return &channel, nil
 }
