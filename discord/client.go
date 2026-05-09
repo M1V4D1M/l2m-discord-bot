@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 )
@@ -86,20 +87,90 @@ func (c *Client) EditInteractionResponse(token string, content string) error {
 	return err
 }
 
-func (c *Client) CreateMessage(channelID string, content string, replyToMessageID string) error {
+func (c *Client) CreateMessage(channelID string, content string, replyToMessageID string, fileName string, fileBytes []byte) (*Message, error) {
 	url := fmt.Sprintf("https://discord.com/api/v10/channels/%s/messages", channelID)
-	body := map[string]interface{}{
+
+	payload := map[string]interface{}{
 		"content": content,
 	}
-
 	if replyToMessageID != "" {
-		body["message_reference"] = map[string]string{
+		payload["message_reference"] = map[string]string{
 			"message_id": replyToMessageID,
 		}
 	}
 
-	_, err := c.request("POST", url, body, true)
-	return err
+	var respBody []byte
+	var err error
+
+	if len(fileBytes) > 0 {
+		// Multipart request for file upload
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+
+		// Add JSON payload
+		jsonPart, err := writer.CreateFormField("payload_json")
+		if err != nil {
+			return nil, err
+		}
+		jsonBytes, _ := json.Marshal(payload)
+		jsonPart.Write(jsonBytes)
+
+		// Add file
+		filePart, err := writer.CreateFormFile("files[0]", fileName)
+		if err != nil {
+			return nil, err
+		}
+		filePart.Write(fileBytes)
+		writer.Close()
+
+		req, err := http.NewRequest("POST", url, body)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bot "+c.Token)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+
+		resp, err := c.HTTPClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		respBody, _ = io.ReadAll(resp.Body)
+		if resp.StatusCode >= 400 {
+			return nil, fmt.Errorf("discord api error: %d %s", resp.StatusCode, string(respBody))
+		}
+	} else {
+		// Simple JSON request
+		respBody, err = c.request("POST", url, payload, true)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var msg Message
+	if err := json.Unmarshal(respBody, &msg); err != nil {
+		return nil, err
+	}
+	return &msg, nil
+}
+
+func (c *Client) CreateThread(channelID, messageID, name string) (*Message, error) {
+	url := fmt.Sprintf("https://discord.com/api/v10/channels/%s/messages/%s/threads", channelID, messageID)
+	body := map[string]interface{}{
+		"name":                name,
+		"auto_archive_duration": 1440,
+	}
+
+	respBody, err := c.request("POST", url, body, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var msg Message
+	if err := json.Unmarshal(respBody, &msg); err != nil {
+		return nil, err
+	}
+	return &msg, nil
 }
 
 func (c *Client) AddReaction(channelID, messageID, emoji string) error {

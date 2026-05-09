@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fast Screenshot Splitter PRO</title>
+    
+    <script>
+        const APP_CONFIG = {
+            "webhookUrl": "/webhook/bot",
+            "channels": [
+                { "label": "Уточкам", "target": "ducks", "color": "#ff6d5a" },
+                { "label": "Бройлерам", "target": "broilers", "color": "#4361ee" }
+            ]
+        };
+    </script>
+
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; text-align: center; padding: 20px; margin: 0; }
+        .controls { max-width: 600px; margin: 0 auto 20px; background: #1e1e1e; padding: 20px; border-radius: 12px; border: 2px solid #333; }
+        .hint { color: #888; font-size: 0.9em; margin-top: 10px; }
+        .input-group { margin: 10px 0; }
+        input[type="number"] { background: #333; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; width: 60px; }
+        #results { display: flex; flex-direction: column; gap: 15px; align-items: center; }
+        .part-card { background: #252525; padding: 15px; border-radius: 10px; border: 1px solid #333; width: fit-content; }
+        canvas { max-width: 100%; border-radius: 4px; margin-bottom: 15px; border: 1px solid #444; display: block; }
+        .btn-group { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .btn { border: none; padding: 10px 18px; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; min-width: 100px; }
+        .btn-upload { background: #6f42c1; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        input[type="file"] { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <h2>Скриншот-мастер</h2>
+        <div class="input-group">
+            <span>Количество строк:</span>
+            <input type="number" id="rowCount" value="3" min="1">
+        </div>
+        <div class="input-group">
+            <label for="upload" class="btn btn-upload">Выбрать файл</label>
+            <input type="file" id="upload" accept="image/*">
+        </div>
+        <div class="hint">Нажми <b>Ctrl + V</b> для вставки скриншота из буфера</div>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        const upload = document.getElementById('upload');
+        const rowInput = document.getElementById('rowCount');
+        const resultsContainer = document.getElementById('results');
+
+        // Вставка из буфера
+        window.addEventListener('paste', (e) => {
+            const items = e.clipboardData.items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    processFile(items[i].getAsFile());
+                }
+            }
+        });
+
+        upload.addEventListener('change', (e) => {
+            if (e.target.files[0]) processFile(e.target.files[0]);
+        });
+
+        function processFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => splitAndRender(img, parseInt(rowInput.value));
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function splitAndRender(img, rows) {
+            resultsContainer.innerHTML = '';
+            const partHeight = img.height / rows;
+
+            for (let i = 0; i < rows; i++) {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = partHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, i * partHeight, img.width, partHeight, 0, 0, img.width, partHeight);
+
+                const card = document.createElement('div');
+                card.className = 'part-card';
+                const btnGroup = document.createElement('div');
+                btnGroup.className = 'btn-group';
+
+                // Генерируем кнопки динамически из конфига в HEAD
+                APP_CONFIG.channels.forEach(channel => {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn';
+                    btn.style.backgroundColor = channel.color;
+                    btn.innerText = channel.label;
+                    btn.onclick = () => sendData(canvas, i, btn, channel.target);
+                    btnGroup.appendChild(btn);
+                });
+
+                card.appendChild(canvas);
+                card.appendChild(btnGroup);
+                resultsContainer.appendChild(card);
+            }
+        }
+
+        async function sendData(canvas, index, btn, targetValue) {
+            const originalText = btn.innerText;
+            const originalColor = btn.style.backgroundColor;
+            
+            btn.disabled = true;
+            btn.innerText = '📡...';
+
+            canvas.toBlob(async (blob) => {
+                const formData = new FormData();
+                formData.append('file0', blob, `part_${index + 1}.png`);
+                formData.append('target', targetValue);
+
+                try {
+                    const response = await fetch(APP_CONFIG.webhookUrl, { 
+                        method: 'POST', 
+                        body: formData 
+                    });
+                    
+                    if (response.ok) {
+                        btn.innerText = '✅ OK';
+                        btn.style.backgroundColor = '#28a745';
+                    } else { throw new Error(); }
+                } catch (e) {
+                    btn.innerText = '❌ Ошибка';
+                    btn.style.backgroundColor = '#dc3545';
+                } finally {
+                    setTimeout(() => {
+                        btn.innerText = originalText;
+                        btn.style.backgroundColor = originalColor;
+                        btn.disabled = false;
+                    }, 2000);
+                }
+            }, 'image/png');
+        }
+    </script>
+</body>
+</html>

@@ -20,6 +20,7 @@ WORKDIR /app
 
 # Copy the binary from the builder stage
 COPY --from=builder /app/bot .
+COPY test.html .
 # Copy .env if needed (though Cloud Run usually uses env vars)
 # COPY .env .
 
