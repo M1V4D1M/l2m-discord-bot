@@ -21,6 +21,8 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
+      - '--set-secrets=DISCORD_BOT_TOKEN=DISCORD_BOT_TOKEN:latest,NOTION_API_TOKEN=NOTION_API_TOKEN:latest,NOTION_DATABASE_ID=NOTION_DATABASE_ID:latest,DISCORD_PUBLIC_KEY=DISCORD_PUBLIC_KEY:latest'
+      - '--set-env-vars=DISCORD_APP_ID=1392154935314878558,SKIP_SIGNATURE_VERIFICATION=false'
 
 # Список образов, которые нужно сохранить
 images:
