@@ -59,32 +59,49 @@ func (c *Client) request(method, url string, body interface{}) ([]byte, error) {
 	return respBody, nil
 }
 
+type QueryResponse struct {
+	Results []struct {
+		ID         string                 `json:"id"`
+		Properties map[string]interface{} `json:"properties"`
+	} `json:"results"`
+	HasMore    bool    `json:"has_more"`
+	NextCursor *string `json:"next_cursor"`
+}
+
 func (c *Client) ClearDatabase() error {
-	// Query all pages
-	url := fmt.Sprintf("https://api.notion.com/v1/databases/%s/query", c.DatabaseID)
-	respBody, err := c.request("POST", url, map[string]interface{}{})
-	if err != nil {
-		return err
-	}
+	hasMore := true
+	var cursor *string
 
-	var result struct {
-		Results []struct {
-			ID string `json:"id"`
-		} `json:"results"`
-	}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return err
-	}
-
-	// Archive each page
-	for _, page := range result.Results {
-		archiveURL := fmt.Sprintf("https://api.notion.com/v1/pages/%s", page.ID)
-		_, err := c.request("PATCH", archiveURL, map[string]interface{}{
-			"archived": true,
-		})
-		if err != nil {
-			fmt.Printf("Warning: failed to archive page %s: %v\n", page.ID, err)
+	for hasMore {
+		url := fmt.Sprintf("https://api.notion.com/v1/databases/%s/query", c.DatabaseID)
+		body := map[string]interface{}{}
+		if cursor != nil {
+			body["start_cursor"] = *cursor
 		}
+
+		respBody, err := c.request("POST", url, body)
+		if err != nil {
+			return err
+		}
+
+		var result QueryResponse
+		if err := json.Unmarshal(respBody, &result); err != nil {
+			return err
+		}
+
+		// Archive each page in this batch
+		for _, page := range result.Results {
+			archiveURL := fmt.Sprintf("https://api.notion.com/v1/pages/%s", page.ID)
+			_, err := c.request("PATCH", archiveURL, map[string]interface{}{
+				"archived": true,
+			})
+			if err != nil {
+				fmt.Printf("Warning: failed to archive page %s: %v\n", page.ID, err)
+			}
+		}
+
+		hasMore = result.HasMore
+		cursor = result.NextCursor
 	}
 
 	return nil
@@ -119,44 +136,51 @@ func (c *Client) AddEntry(username, discordID string) error {
 }
 
 func (c *Client) GetUsersWithScrolls() (map[string]bool, error) {
-	url := fmt.Sprintf("https://api.notion.com/v1/databases/%s/query", c.DatabaseID)
-	// Filter for has_scrolls == true
-	filter := map[string]interface{}{
-		"filter": map[string]interface{}{
-			"property": "has_scrolls",
-			"checkbox": map[string]bool{"equals": true},
-		},
-	}
-
-	respBody, err := c.request("POST", url, filter)
-	if err != nil {
-		return nil, err
-	}
-
-	var result struct {
-		Results []struct {
-			Properties map[string]interface{} `json:"properties"`
-		} `json:"results"`
-	}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, err
-	}
-
 	users := make(map[string]bool)
-	for _, page := range result.Results {
-		// Extract Discord ID
-		if prop, ok := page.Properties["Discord ID"].(map[string]interface{}); ok {
-			if rt, ok := prop["rich_text"].([]interface{}); ok && len(rt) > 0 {
-				if textObj, ok := rt[0].(map[string]interface{}); ok {
-					if text, ok := textObj["text"].(map[string]interface{}); ok {
-						if content, ok := text["content"].(string); ok {
-							users[content] = true
+	hasMore := true
+	var cursor *string
+
+	for hasMore {
+		url := fmt.Sprintf("https://api.notion.com/v1/databases/%s/query", c.DatabaseID)
+		filter := map[string]interface{}{
+			"filter": map[string]interface{}{
+				"property": "has_scrolls",
+				"checkbox": map[string]bool{"equals": true},
+			},
+		}
+		if cursor != nil {
+			filter["start_cursor"] = *cursor
+		}
+
+		respBody, err := c.request("POST", url, filter)
+		if err != nil {
+			return nil, err
+		}
+
+		var result QueryResponse
+		if err := json.Unmarshal(respBody, &result); err != nil {
+			return nil, err
+		}
+
+		for _, page := range result.Results {
+			// Extract Discord ID
+			if prop, ok := page.Properties["Discord ID"].(map[string]interface{}); ok {
+				if rt, ok := prop["rich_text"].([]interface{}); ok && len(rt) > 0 {
+					if textObj, ok := rt[0].(map[string]interface{}); ok {
+						if text, ok := textObj["text"].(map[string]interface{}); ok {
+							if content, ok := text["content"].(string); ok {
+								users[content] = true
+							}
 						}
 					}
 				}
 			}
 		}
+
+		hasMore = result.HasMore
+		cursor = result.NextCursor
 	}
 
+	fmt.Printf("Notion: fetched %d users with scrolls\n", len(users))
 	return users, nil
 }

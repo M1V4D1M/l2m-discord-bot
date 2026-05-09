@@ -24,6 +24,7 @@ type Bot struct {
 
 func main() {
 	godotenv.Load()
+	rand.Seed(time.Now().UnixNano())
 
 	bot := &Bot{
 		DiscordClient: discord.NewClient(os.Getenv("DISCORD_BOT_TOKEN"), os.Getenv("DISCORD_APP_ID")),
@@ -206,8 +207,9 @@ func (b *Bot) HandleRoll(c *gin.Context, interaction discord.Interaction) {
 		}
 
 		// 4. Randomly select
-		rand.Seed(time.Now().UnixNano())
 		winner := eligible[rand.Intn(len(eligible))]
+
+		log.Printf("Roll command: found %d eligible participants. Selected winner: %s", len(eligible), winner.userName)
 
 		resultMsg := fmt.Sprintf("🎲 Розыгрыш завершен!\nПобедитель: <@%s> (%s)\nЭтот человек получит предмет!", winner.userID, winner.userName)
 		b.DiscordClient.EditInteractionResponse(interaction.Token, resultMsg)
